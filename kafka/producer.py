@@ -1,9 +1,13 @@
+# producer.py
+from kafka import KafkaProducer
+import json
+import time
 import random
 from datetime import datetime, timedelta
-import json
+
 import pandas as pd
 import numpy as np
-from pymongo import MongoClient
+
 def generate_zpid():
     return random.randint(19000000, 442999999)
 
@@ -66,10 +70,7 @@ def generate_broker():
     ]
     return random.choice(brokers)
 
-def generate_data(num_records=5000):
-    data = []
-    
-    for _ in range(num_records):
+def generate_data():
         city_info = generate_city()
         bedrooms, bathrooms, living_area = generate_specs()
         price = generate_price()
@@ -120,24 +121,28 @@ def generate_data(num_records=5000):
             "listingSubType.is_newHome": random.choice([True, False]),
             "videoCount": random.choice([None, 0, 1, 2])
         }
-        data.append(record)
     
-    return data
+        return record
+# Khởi tạo producer
+producer = KafkaProducer(
+    bootstrap_servers=['localhost:9092', 'localhost:9093', 'localhost:9094'],
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
 
-# Generate the data
-generated_data = generate_data(5)
+# Tên topic
+TOPIC_NAME = "example_topic"
 
-# Convert to DataFrame
-df = pd.DataFrame(generated_data)
-json_file_path = "generated_real_estate_data.json"
-df_json = df.to_dict(orient='records')
+# Gửi dữ liệu
+def send_data():
+    try:
+        while True:
+            data = generate_data()
+            producer.send(TOPIC_NAME, value=data)
+            print(f"Sent data: {data}")
+            time.sleep(2)  # Đợi 2 giây trước khi gửi dữ liệu tiếp
+    except KeyboardInterrupt:
+        producer.close()
+        print("\nProducer stopped")
 
-# Connect to MongoDB
-client = MongoClient("mongodb://localhost:27017/")
-db = client["Bigdata"]
-collection = db["Bigdata"]
-
-# Insert data into MongoDB
-collection.insert_many(df_json)
-
-print("Data inserted into MongoDB successfully.")
+if __name__ == "__main__":
+    send_data()
