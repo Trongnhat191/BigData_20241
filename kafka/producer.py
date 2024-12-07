@@ -8,6 +8,11 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 
+
+# gen timestamp
+def gen_timestamp():
+    return int(datetime.now().timestamp() * 1000)
+
 def generate_zpid():
     return random.randint(19000000, 442999999)
 
@@ -77,7 +82,8 @@ def generate_data():
         address = generate_address()
         
         record = {
-            "zpid": generate_zpid(),
+            "timestamp": gen_timestamp(),
+            "zpid": generate_zpid(), #ID
             "homeStatus": "FOR_SALE",
             "detailUrl": f"https://www.zillow.com/homedetails/{address.replace(' ', '-')}-{city_info[0]}-CA-{city_info[1]}/",
             "address": f"{address}, {city_info[0]}, CA {city_info[1]}",
@@ -86,39 +92,39 @@ def generate_data():
             "state": "CA",
             "country": "USA",
             "zipcode": city_info[1],
-            "latitude": city_info[2] + random.uniform(-0.05, 0.05),
-            "longitude": city_info[3] + random.uniform(-0.05, 0.05),
+            "latitude": city_info[2] + random.uniform(-0.05, 0.05),# vi do
+            "longitude": city_info[3] + random.uniform(-0.05, 0.05),#kinh do
             "homeType": generate_home_type(),
             "price": price,
             "currency": "USD",
             "zestimate": int(price * random.uniform(0.9, 1.1)),
             "rentZestimate": int(price * 0.004),
             "taxAssessedValue": int(price * 0.7),
-            "lotAreaValue": generate_lot_area(),
+            "lotAreaValue": generate_lot_area(), #dien tich dat
             "lotAreaUnit": "acres",
             "bathrooms": bathrooms,
             "bedrooms": bedrooms,
             "livingArea": living_area,
             "daysOnZillow": random.randint(0, 200),
-            "isFeatured": random.choice([True, False]),
-            "isPreforeclosureAuction": False,
+            "isFeatured": random.choice([True, False]), #co phai noi bat khong
+            "isPreforeclosureAuction": False,# co phai dau gia khong
             "timeOnZillow": random.randint(100000, 20000000),
-            "isNonOwnerOccupied": True,
-            "isPremierBuilder": False,
-            "isZillowOwned": False,
-            "isShowcaseListing": random.choice([True, False]),
+            "isNonOwnerOccupied": True,# co phai chu nha khong
+            "isPremierBuilder": False,# Có phải bất động sản từ nhà thầu cao cấp không
+            "isZillowOwned": False, # có phải zillow sở hữu không
+            "isShowcaseListing": random.choice([True, False]), # có phải danh sách noi bat không
             "imgSrc": f"https://photos.zillowstatic.com/fp/{random.randbytes(16).hex()}-p_e.jpg",
             "hasImage": True,
-            "brokerName": generate_broker(),
-            "listingSubType.is_FSBA": True,
+            "brokerName": generate_broker(), # tên môi giới
+            "listingSubType.is_FSBA": True, # có phải bán chính chủ không
             "priceChange": random.choice([None, int(price * random.uniform(-0.1, 0.1))]),
             "datePriceChanged": random.choice([None, int((datetime.now() + timedelta(days=random.randint(-30, 30))).timestamp() * 1000)]),
             "openHouse": random.choice([None, f"Sat. {random.randint(4, 10)}pm-{random.randint(5,8)}pm"]),
             "priceReduction": None,
             "unit": None,
-            "listingSubType.is_openHouse": True,
-            "newConstructionType": random.choice([None, "BUILDER_SPEC", "NEW_CONSTRUCTION_TYPE_OTHER"]),
-            "listingSubType.is_newHome": random.choice([True, False]),
+            "listingSubType.is_openHouse": True, #Có phải là danh sách nhà mở cửa xem không 
+            "newConstructionType": random.choice([None, "BUILDER_SPEC", "NEW_CONSTRUCTION_TYPE_OTHER"]), # Loại xây dựng mới
+            "listingSubType.is_newHome": random.choice([True, False]), #Có phải là nhà mới không
             "videoCount": random.choice([None, 0, 1, 2])
         }
     

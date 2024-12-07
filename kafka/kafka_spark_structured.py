@@ -1,145 +1,161 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, from_json
-from pyspark.sql.types import *
-from elasticsearch import Elasticsearch
-from datetime import datetime
-import json
-from kafka import KafkaConsumer
-
-schema = StructType([
-    StructField("zpid", StringType(), True),
-    # ... (previous schema remains the same)
-    StructField("videoCount", IntegerType(), True)
-])
+from pyspark.sql.functions import from_json, col, window, sum, avg
+from pyspark.sql.types import (
+    StructType, StructField, StringType, DoubleType, IntegerType, 
+    BooleanType, LongType, TimestampType
+)
 
 def create_spark_session():
-    """Create a Spark Session with Kafka integration."""
-    return SparkSession \
-        .builder \
-        .appName("KafkaSparkStructured") \
-        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.2.0") \
-        .getOrCreate()
+    """
+    Tạo SparkSession với cấu hình cho Kafka Streaming
+    """
+    return (SparkSession.builder
+            .appName("ZillowKafkaStructuredStreaming")
+            .master("local[*]")
+            .config("spark.jars.packages", 
+                    "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.2")
+            .config("spark.sql.streaming.checkpointLocation", "/tmp/checkpoint")
+            .getOrCreate())
 
-def create_elasticsearch_client(hosts=None):
+def define_input_schema():
     """
-    Create Elasticsearch client with error handling.
-    
-    :param hosts: List of Elasticsearch hosts
-    :return: Elasticsearch client
+    Định nghĩa schema cho dữ liệu Kafka Zillow
     """
-    if hosts is None:
-        hosts = ["http://localhost:9200"]
+    return StructType([
+        StructField("timestamp", TimestampType(), True),
+        StructField("zpid", StringType(), True),
+        StructField("homeStatus", StringType(), True),
+        StructField("detailUrl", StringType(), True),
+        StructField("address", StringType(), True),
+        StructField("streetAddress", StringType(), True),
+        StructField("city", StringType(), True),
+        StructField("state", StringType(), True),
+        StructField("country", StringType(), True),
+        StructField("zipcode", StringType(), True),
+        StructField("latitude", DoubleType(), True),
+        StructField("longitude", DoubleType(), True),
+        StructField("homeType", StringType(), True),
+        StructField("price", DoubleType(), True),
+        StructField("currency", StringType(), True),
+        StructField("zestimate", IntegerType(), True),
+        StructField("rentZestimate", IntegerType(), True),
+        StructField("taxAssessedValue", IntegerType(), True),
+        StructField("lotAreaValue", DoubleType(), True),
+        StructField("lotAreaUnit", StringType(), True),
+        StructField("bathrooms", IntegerType(), True),
+        StructField("bedrooms", IntegerType(), True),
+        StructField("livingArea", IntegerType(), True),
+        StructField("daysOnZillow", IntegerType(), True),
+        StructField("isFeatured", BooleanType(), True),
+        StructField("isPreforeclosureAuction", BooleanType(), True),
+        StructField("timeOnZillow", IntegerType(), True),
+        StructField("isNonOwnerOccupied", BooleanType(), True),
+        StructField("isPremierBuilder", BooleanType(), True),
+        StructField("isZillowOwned", BooleanType(), True),
+        StructField("isShowcaseListing", BooleanType(), True),
+        StructField("imgSrc", StringType(), True),
+        StructField("hasImage", BooleanType(), True),
+        StructField("brokerName", StringType(), True),
+        StructField("listingSubType.is_FSBA", BooleanType(), True),
+        StructField("priceChange", IntegerType(), True),
+        StructField("datePriceChanged", LongType(), True),
+        StructField("openHouse", StringType(), True),
+        StructField("priceReduction", StringType(), True),
+        StructField("unit", StringType(), True),
+        StructField("listingSubType.is_openHouse", BooleanType(), True),
+        StructField("newConstructionType", StringType(), True),
+        StructField("listingSubType.is_newHome", BooleanType(), True),
+        StructField("videoCount", IntegerType(), True)
+    ])
+
+def setup_kafka_streaming(spark, kafka_brokers, kafka_topic):
+    """
+    Thiết lập streaming dataframe từ Kafka
     
-    try:
-        es = Elasticsearch(
-            hosts=hosts,
-            verify_certs=True
+    :param spark: SparkSession
+    :param kafka_brokers: Danh sách Kafka brokers
+    :param kafka_topic: Tên topic Kafka
+    :return: Streaming DataFrame
+    """
+    # Đọc dữ liệu từ Kafka
+    streaming_df = (spark
+        .readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", kafka_brokers)
+        .option("subscribe", kafka_topic)
+        .option("startingOffsets", "latest")
+        .load()
+    )
+    
+    # Parse giá trị từ Kafka message
+    parsed_df = (streaming_df
+        .select(
+            from_json(
+                col("value").cast("string"), 
+                define_input_schema()
+            ).alias("data")
         )
-        # Verify connection
-        if not es.ping():
-            raise ValueError("Elasticsearch connection failed")
-        return es
-    except Exception as e:
-        print(f"Error connecting to Elasticsearch: {e}")
-        return None
-
-def format_timestamp(timestamp):
-    """
-    Convert timestamp to ISO 8601 format.
+        .select("data.*")
+    )
     
-    :param timestamp: Input timestamp
-    :return: Formatted timestamp
-    """
-    try:
-        if isinstance(timestamp, str):
-            dt = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
-            return dt.isoformat()
-        return timestamp
-    except (ValueError, TypeError):
-        return timestamp
+    return parsed_df
 
-def index_to_elasticsearch(es_client, index_name, data):
+def process_streaming_data(streaming_df):
     """
-    Index data to Elasticsearch with robust error handling.
-    
-    :param es_client: Elasticsearch client
-    :param index_name: Target index name
-    :param data: Data to be indexed
+    Xử lý dữ liệu streaming Zillow: 
+    - Phân tích giá nhà theo thành phố
+    - Thống kê loại nhà
     """
-    if not es_client:
-        print("Elasticsearch client not initialized")
-        return
-
-    try:
-        # Ensure data is a dictionary
-        if not isinstance(data, dict):
-            data = json.loads(data)
-
-        # Convert timestamp if present
-        if 'timestamp' in data:
-            data['timestamp'] = format_timestamp(data['timestamp'])
-
-        # Index the document
-        es_client.index(index=index_name, document=data)
-        print(f"Successfully indexed data to {index_name}")
-    except Exception as e:
-        print(f"Error indexing data to Elasticsearch: {e}")
-
-def create_kafka_consumer(bootstrap_servers, topic):
-    """
-    Create a Kafka consumer with error handling.
-    
-    :param bootstrap_servers: List of Kafka bootstrap servers
-    :param topic: Kafka topic to consume from
-    :return: Kafka consumer
-    """
-    try:
-        consumer = KafkaConsumer(
-            topic,
-            bootstrap_servers=bootstrap_servers,
-            auto_offset_reset='earliest',
-            enable_auto_commit=True,
-            group_id='spark-elasticsearch-consumer',
-            value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+    # Nhóm và phân tích dữ liệu
+    city_property_analysis = (streaming_df
+        .groupBy("city", "homeType")
+        .agg(
+            avg("price").alias("average_price"),
+            sum("livingArea").alias("total_living_area"),
+            avg("zestimate").alias("average_zestimate"),
+            sum("bedrooms").alias("total_bedrooms")
         )
-        return consumer
-    except Exception as e:
-        print(f"Error creating Kafka consumer: {e}")
-        return None
+    )
+    
+    return city_property_analysis
+
+def write_streaming_output(windowed_sales):
+    """
+    Ghi kết quả streaming ra console
+    """
+    # Xuất ra console
+    console_query = (windowed_sales
+        .writeStream
+        .outputMode("complete")
+        .format("console")
+        .option("truncate", "false")
+        .start()
+    )
+    
+    return console_query
 
 def main():
-    """
-    Main function to orchestrate Kafka consumption and Elasticsearch indexing.
-    """
-    # Kafka and Elasticsearch configuration
-    kafka_servers = ['localhost:9092', 'localhost:9093', 'localhost:9094']
-    kafka_topic = 'example_topic'
-    es_hosts = ['http://localhost:9200']
-    es_index = 'example_index'
-
-    # Create Elasticsearch client
-    es_client = create_elasticsearch_client(es_hosts)
+    # Cấu hình Kafka brokers
+    KAFKA_BROKERS = "localhost:9092,localhost:9093,localhost:9094"
+    KAFKA_TOPIC = "example_topic"
     
-    # Create Kafka consumer
-    kafka_consumer = create_kafka_consumer(kafka_servers, kafka_topic)
+    # Tạo Spark Session
+    spark = create_spark_session()
     
-    if not kafka_consumer:
-        print("Failed to create Kafka consumer. Exiting.")
-        return
-
-    try:
-        for message in kafka_consumer:
-            try:
-                # Process and index each message
-                index_to_elasticsearch(es_client, es_index, message.value)
-            except Exception as e:
-                print(f"Error processing message: {e}")
-
-    except KeyboardInterrupt:
-        print("\nConsumer stopped by user")
-    finally:
-        if kafka_consumer:
-            kafka_consumer.close()
+    # Giảm mức log
+    spark.sparkContext.setLogLevel("WARN")
+    
+    # Tạo streaming dataframe từ Kafka
+    streaming_df = setup_kafka_streaming(spark, KAFKA_BROKERS, KAFKA_TOPIC)
+    
+    # Xử lý dữ liệu
+    processed_data = process_streaming_data(streaming_df)
+    
+    # Ghi output
+    query = write_streaming_output(processed_data)
+    
+    # Đợi đến khi streaming kết thúc
+    query.awaitTermination()
 
 if __name__ == "__main__":
     main()
