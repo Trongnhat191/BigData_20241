@@ -7,20 +7,21 @@ from pyspark.sql.types import (
 
 def create_spark_session():
     """
-    Tạo SparkSession với cấu hình cho Kafka Streaming
+    Tạo SparkSession với cấu hình cho Kafka và Elasticsearch
     """
     return (SparkSession.builder
-            .appName("ZillowKafkaStructuredStreaming")
+            .appName("ZillowKafkaElasticsearchStreaming")
             .master("local[*]")
             .config("spark.jars.packages", 
-                    "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.2")
+                    "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.2,"
+                    "org.elasticsearch:elasticsearch-spark-30_2.12:7.17.16")
             .config("spark.sql.streaming.checkpointLocation", "/tmp/checkpoint")
+            .config("es.nodes", "localhost:9200")
+            .config("es.nodes.wan.only", "true")
+            .config("es.index.auto.create", "true")
             .getOrCreate())
 
 def define_input_schema():
-    """
-    Định nghĩa schema cho dữ liệu Kafka Zillow
-    """
     return StructType([
         StructField("timestamp", TimestampType(), True),
         StructField("zpid", StringType(), True),
@@ -83,7 +84,8 @@ def setup_kafka_streaming(spark, kafka_brokers, kafka_topic):
         .format("kafka")
         .option("kafka.bootstrap.servers", kafka_brokers)
         .option("subscribe", kafka_topic)
-        .option("startingOffsets", "latest")
+        .option("startingOffsets", "earliest")
+        .option("failOnDataLoss", "false")
         .load()
     )
     
@@ -107,8 +109,23 @@ def process_streaming_data(streaming_df):
     - Thống kê loại nhà
     """
     # Nhóm và phân tích dữ liệu
-    city_property_analysis = (streaming_df
-        .groupBy("city", "homeType")
+    # city_property_analysis = (streaming_df
+    #     .groupBy("city", "homeType")
+    #     .agg(
+    #         avg("price").alias("average_price"),
+    #         sum("livingArea").alias("total_living_area"),
+    #         avg("zestimate").alias("average_zestimate"),
+    #         sum("bedrooms").alias("total_bedrooms")
+    #     )
+    # )
+    
+    # Tính toán theo cửa sổ thời gian
+    windowed_sales = (streaming_df
+        .withWatermark("timestamp", "1 minutes")
+        .groupBy(
+            window("timestamp", "1 minutes"),
+            "city"
+        )
         .agg(
             avg("price").alias("average_price"),
             sum("livingArea").alias("total_living_area"),
@@ -116,14 +133,25 @@ def process_streaming_data(streaming_df):
             sum("bedrooms").alias("total_bedrooms")
         )
     )
-    
-    return city_property_analysis
+
+    return windowed_sales
+    # return city_property_analysis
 
 def write_streaming_output(windowed_sales):
     """
-    Ghi kết quả streaming ra console
+    Ghi kết quả streaming ra Elasticsearch và console
     """
-    # Xuất ra console
+    # Xuất ra Elasticsearch
+    elasticsearch_query = (windowed_sales
+        .writeStream
+        .outputMode("append")
+        .format("org.elasticsearch.spark.sql")
+        .option("es.resource", "example_index")
+        .option("checkpointLocation", "/tmp/es_checkpoint")
+        .start()
+    )
+    print("Writing to Elasticsearch...", elasticsearch_query)
+    # Xuất ra console (tuỳ chọn, có thể bỏ qua)
     console_query = (windowed_sales
         .writeStream
         .outputMode("complete")
@@ -132,7 +160,7 @@ def write_streaming_output(windowed_sales):
         .start()
     )
     
-    return console_query
+    return [elasticsearch_query, console_query]
 
 def main():
     # Cấu hình Kafka brokers
@@ -152,10 +180,11 @@ def main():
     processed_data = process_streaming_data(streaming_df)
     
     # Ghi output
-    query = write_streaming_output(processed_data)
+    queries = write_streaming_output(processed_data)
     
     # Đợi đến khi streaming kết thúc
-    query.awaitTermination()
+    for query in queries:
+        query.awaitTermination()
 
 if __name__ == "__main__":
     main()
