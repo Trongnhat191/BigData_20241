@@ -6,9 +6,6 @@ from pyspark.sql.types import (
 )
 
 def create_spark_session():
-    """
-    Tạo SparkSession với cấu hình cho Kafka và Elasticsearch
-    """
     return (SparkSession.builder
             .appName("ZillowKafkaElasticsearchStreaming")
             .master("local[*]")
@@ -70,14 +67,6 @@ def define_input_schema():
     ])
 
 def setup_kafka_streaming(spark, kafka_brokers, kafka_topic):
-    """
-    Thiết lập streaming dataframe từ Kafka
-    
-    :param spark: SparkSession
-    :param kafka_brokers: Danh sách Kafka brokers
-    :param kafka_topic: Tên topic Kafka
-    :return: Streaming DataFrame
-    """
     # Đọc dữ liệu từ Kafka
     streaming_df = (spark
         .readStream
@@ -103,22 +92,6 @@ def setup_kafka_streaming(spark, kafka_brokers, kafka_topic):
     return parsed_df
 
 def process_streaming_data(streaming_df):
-    """
-    Xử lý dữ liệu streaming Zillow: 
-    - Phân tích giá nhà theo thành phố
-    - Thống kê loại nhà
-    """
-    # Nhóm và phân tích dữ liệu
-    # city_property_analysis = (streaming_df
-    #     .groupBy("city", "homeType")
-    #     .agg(
-    #         avg("price").alias("average_price"),
-    #         sum("livingArea").alias("total_living_area"),
-    #         avg("zestimate").alias("average_zestimate"),
-    #         sum("bedrooms").alias("total_bedrooms")
-    #     )
-    # )
-    
     # Tính toán theo cửa sổ thời gian
     windowed_sales = (streaming_df
         .withWatermark("timestamp", "1 minutes")
@@ -138,9 +111,6 @@ def process_streaming_data(streaming_df):
     # return city_property_analysis
 
 def write_streaming_output(windowed_sales):
-    """
-    Ghi kết quả streaming ra Elasticsearch và console
-    """
     # Xuất ra Elasticsearch
     elasticsearch_query = (windowed_sales
         .writeStream

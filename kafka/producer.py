@@ -145,7 +145,7 @@ def send_data():
             data = generate_data()
             producer.send(TOPIC_NAME, value=data)
             print(f"Sent data: {data}")
-            time.sleep(2)  # Đợi 2 giây trước khi gửi dữ liệu tiếp
+            time.sleep(0.1)
     except KeyboardInterrupt:
         producer.close()
         print("\nProducer stopped")

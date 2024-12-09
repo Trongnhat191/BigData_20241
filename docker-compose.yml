@@ -139,6 +139,54 @@ services:
     networks:
       - es-net
 
+  cassandra:
+    image: cassandra:4.0.5
+    container_name: cassandra
+    hostname: cassandra
+    env_file:
+      - ./cassandra/cassandra.env
+    ports:
+      - 9042:9042
+    volumes:
+      - ../storage/cassandra:/var/lib/cassandra
+    networks:
+      - es-net
+
+
+  spark-master:
+    image: bde2020/spark-master:3.0.0-hadoop3.2
+    container_name: spark-master
+    depends_on:
+      - namenode
+      - datanode-1
+      - datanode-2
+      - datanode-3
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    environment:
+      - INIT_DAEMON_STEP=setup_spark
+      - CORE_CONF_fs_defaultFS=hdfs://localhost:9000
+      - SPARK_SUBMIT_OPTS=-Dorg.springframework.boot.loader.JarLauncher
+      - SPARK_OPTS=--packages com.datastax.spark:spark-cassandra-connector_2.12:3.0.0
+    networks:
+      - es-net
+
+      
+  spark-worker:
+    image: bde2020/spark-worker:3.0.0-hadoop3.2
+    container_name: spark-worker
+    mem_limit: 256m
+    depends_on:
+      - spark-master
+    ports:
+      - "8081:8081"
+    environment:
+      - "SPARK_MASTER=spark://localhost:7077"
+      - CORE_CONF_fs_defaultFS=hdfs://localhost:9000
+    networks:
+      - es-net
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.15.1
     container_name: elasticsearch
