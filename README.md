@@ -1,3 +1,5 @@
+[Báo cáo BTL BigData - Nhóm 14 - Lớp 154050](https://docs.google.com/document/d/1Svi3nbpFZvkNQm9AJzbJgJ29YFHlan6-cYaCBs4nb8U/edit?tab=t.0)
+
 # Zillow House with Kafka, Spark, and Cassandra
 
 ## **Mô tả dự án**
@@ -76,6 +78,3 @@ Chạy file sparkML.py.py:
 ```bash
 python sparkML.py
 ```
-
-
-
