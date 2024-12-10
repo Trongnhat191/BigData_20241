@@ -3,10 +3,13 @@ import json
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, FloatType, BooleanType, TimestampType, DoubleType, LongType
+from datetime import datetime
+
+day = datetime.now().strftime("%d")
 
 hdfs_client = InsecureClient("http://localhost:9870", user="root")
-file_name_list = hdfs_client.list("/data/kafka_messages/2024/12/09")
-hdfs_path_list = [f"/data/kafka_messages/2024/12/09/{file_name}" for file_name in file_name_list]
+file_name_list = hdfs_client.list(f"/data/kafka_messages/2024/12/{day}")
+hdfs_path_list = [f"/data/kafka_messages/2024/12/{day}/{file_name}" for file_name in file_name_list]
 
 spark = SparkSession.builder \
     .appName("Zillow Data Processing") \

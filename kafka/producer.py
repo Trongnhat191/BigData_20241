@@ -9,9 +9,14 @@ import pandas as pd
 import numpy as np
 
 
-# gen timestamp
+# # gen timestamp
 def gen_timestamp():
     return int(datetime.now().timestamp() * 1000)
+
+#For testing late data
+# def gen_timestamp():
+#     ten_minutes_ago = datetime.now() - timedelta(minutes=10)
+#     return ten_minutes_ago.timestamp() * 1000
 
 def generate_zpid():
     return random.randint(19000000, 442999999)
