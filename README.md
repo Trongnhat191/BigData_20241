@@ -1,4 +1,4 @@
-# Zillow House Price Prediction with Kafka, Spark, and Cassandra
+# Zillow House with Kafka, Spark, and Cassandra
 
 ## **Mô tả dự án**
 Dự án này xây dựng một pipeline dữ liệu hoàn chỉnh để dự đoán giá nhà dựa trên dữ liệu bất động sản. Hệ thống bao gồm các bước:
@@ -68,15 +68,13 @@ python consumer_batch.py
 **Structured Streaming Consumer**
 Xử lý dữ liệu và lưu vào Elasticsearch:
 ```bash
-spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.2.0 \
-             consumer_structured_stream.py
+python consumer_structured_stream.py
 ```
 
 **Huấn luyện mô hình dự đoán giá nhà**
 Chạy file ZillowHousePricePrediction.py:
 ```bash
-spark-submit --packages com.datastax.spark:spark-cassandra-connector_2.12:3.2.0 \
-             ZillowHousePricePrediction.py
+python ZillowHousePricePrediction.py
 ```
 
 
