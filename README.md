@@ -72,9 +72,9 @@ python consumer_structured_stream.py
 ```
 
 **Huấn luyện mô hình dự đoán giá nhà**
-Chạy file ZillowHousePricePrediction.py:
+Chạy file sparkML.py.py:
 ```bash
-python ZillowHousePricePrediction.py
+python sparkML.py
 ```
 
 
